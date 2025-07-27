@@ -1,0 +1,113 @@
+@import "tailwindcss";
+
+:root {
+  --background: #ffffff;
+  --foreground: #171717;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-geist-sans);
+  --font-mono: var(--font-geist-mono);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --background: #0a0a0a;
+    --foreground: #ededed;
+  }
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: Arial, Helvetica, sans-serif;
+}
+
+#container {
+  position: relative;
+  width: 100vw;
+  height: 100vh;
+}
+
+#ui {
+  position: absolute;
+  top: 20px;
+  left: 20px;
+  color: #d400ff;
+  z-index: 100;
+  background: rgba(30, 0, 60, 0.7);
+  padding: 10px;
+  border-radius: 8px;
+  font-size: 0.9em;
+  box-shadow: 0 0 20px rgba(212, 0, 255, 0.5);
+  border: 1px solid #d400ff;
+}
+
+#victory {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  background: linear-gradient(135deg, #d400ff, #00ffcc);
+  color: #1a0033;
+  padding: 30px;
+  border-radius: 15px;
+  text-align: center;
+  z-index: 200;
+  display: none;
+  box-shadow: 0 0 40px rgba(212, 0, 255, 0.7);
+  border: 2px solid #d400ff;
+  animation: victoryGlow 1.5s ease-in-out infinite;
+}
+
+@keyframes victoryGlow {
+  0%, 100% { box-shadow: 0 0 40px rgba(212, 0, 255, 0.7); }
+  50% { box-shadow: 0 0 60px rgba(212, 0, 255, 1); }
+}
+
+#victory h2 {
+  font-size: 2.8em;
+  margin: 0 0 15px;
+  text-shadow: 0 0 15px rgba(212, 0, 255, 0.8);
+}
+
+#victory p {
+  font-size: 1.3em;
+  margin: 10px 0;
+  font-style: italic;
+  text-shadow: 0 0 5px rgba(212, 0, 255, 0.5);
+}
+
+.victory-stats {
+  margin: 15px 0;
+  padding: 10px;
+  background: rgba(212, 0, 255, 0.15);
+  border-radius: 8px;
+  border: 1px solid #d400ff;
+}
+
+.control-button {
+  background: rgba(212, 0, 255, 0.2);
+  border: 2px solid #d400ff;
+  color: #d400ff;
+  padding: 8px 16px;
+  margin: 5px;
+  border-radius: 5px;
+  cursor: pointer;
+  user-select: none;
+  display: inline-block;
+  transition: all 0.2s ease;
+  text-shadow: 0 0 5px #d400ff;
+}
+
+.control-button:hover {
+  background: rgba(212, 0, 255, 0.4);
+  transform: scale(1.05);
+  box-shadow: 0 0 15px #d400ff;
+}
+
+.control-button:active {
+  background: rgba(212, 0, 255, 0.6);
+}
