@@ -431,6 +431,7 @@ const MazeGame = ({
           apiKey: process.env.NEXT_PUBLIC_MULTISYNQ_API_KEY || '',
           appId: process.env.NEXT_PUBLIC_MULTISYNQ_APP_ID || 'com.monaze.game',
           name: gameId,
+          password: gameId,
           model: MazeModel,
         });
         sessionRef.current = session;
