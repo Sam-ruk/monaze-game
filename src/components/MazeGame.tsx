@@ -72,6 +72,7 @@ class MazeModel extends Multisynq.Model {
   public timeLeft!: number;
   public leaderboard!: Array<{ playerId: string; info: string }>;
   private colorIndex!: number;
+  private gameStartTime!: number | null; // Add this line
 
   init() {
     this.players = {};
@@ -79,6 +80,7 @@ class MazeModel extends Multisynq.Model {
     this.timeLeft = 30;
     this.leaderboard = [];
     this.colorIndex = 0;
+    this.gameStartTime = null; // Now this won't error
     
     // Subscribe to events
     this.subscribe('player', 'join', this.handlePlayerJoin);
@@ -91,23 +93,29 @@ class MazeModel extends Multisynq.Model {
   }
 
   handlePlayerJoin(playerId: string) {
-    if (!this.players[playerId]) {
-      this.players[playerId] = {
-        position: new THREE.Vector3(
-          (mazeLayouts[0].start.x - mazeLayouts[0].layout.length / 2) * WALL_SIZE,
-          BALL_HEIGHT,
-          (mazeLayouts[0].start.z - mazeLayouts[0].layout[0].length / 2) * WALL_SIZE,
-        ),
-        velocity: new THREE.Vector3(0, 0, 0),
-        finishTime: null,
-        isLocal: false,
-        color: colors[this.colorIndex % colors.length],
-      };
-      this.colorIndex++;
-      
-      this.publish('player', 'joined', { playerId, playerData: this.players[playerId] });
-    }
+  if (!this.players[playerId]) {
+    this.players[playerId] = {
+      position: new THREE.Vector3(
+        (mazeLayouts[0].start.x - mazeLayouts[0].layout.length / 2) * WALL_SIZE,
+        BALL_HEIGHT,
+        (mazeLayouts[0].start.z - mazeLayouts[0].layout[0].length / 2) * WALL_SIZE,
+      ),
+      velocity: new THREE.Vector3(0, 0, 0),
+      finishTime: null,
+      isLocal: false,
+      color: colors[this.colorIndex % colors.length],
+      // Remove the joinedAt line
+    };
+    this.colorIndex++;
+    
+    this.publish('player', 'joined', { 
+      playerId, 
+      playerData: this.players[playerId],
+      gamePhase: this.phase,
+      timeLeft: this.timeLeft 
+    });
   }
+}
 
   handleUpdatePosition(data: { playerId: string; position: { x: number; y: number; z: number }; velocity: { x: number; y: number; z: number }; finishTime: number | null }) {
   const { playerId, position, velocity, finishTime } = data;
@@ -139,29 +147,48 @@ handleTiltData(data: { playerId: string; tiltX: number; tiltZ: number }) {
 this.publish('player', 'tiltReceived', { playerId, tiltX, tiltZ });
 }
 
-  tick() {
-    let newTime = this.timeLeft - 1;
-    let newPhase = this.phase;
-
-    if (this.phase === 'joining' && newTime <= 0) {
-      newPhase = 'playing';
-      newTime = 600;
-    } else if (this.phase === 'playing' && newTime <= 0) {
-      newPhase = 'ended';
-      newTime = 10;
-      this.updateLeaderboard();
-    } else if (this.phase === 'ended' && newTime <= 0) {
-      this.resetGame();
-      newPhase = 'joining';
-      newTime = 30;
-    }
-
-    this.phase = newPhase;
-    this.timeLeft = newTime;
-this.publish('game', 'phaseChanged', { phase: this.phase, timeLeft: this.timeLeft, leaderboard: this.leaderboard });
-    
-    this.future(1000).tick();
+handlePlayerLeave(playerId: string) {
+  if (this.players[playerId]) {
+    delete this.players[playerId];
+    this.publish('player', 'left', { playerId });
+    this.updateLeaderboard();
   }
+}
+
+  tick() {
+  let newTime = this.timeLeft - 1;
+  let newPhase = this.phase;
+
+  if (this.phase === 'joining' && newTime <= 0) {
+    newPhase = 'playing';
+    newTime = 600;
+    // Reset all players to start position when game actually starts
+    Object.keys(this.players).forEach(playerId => {
+      this.players[playerId].position.set(
+        (mazeLayouts[0].start.x - mazeLayouts[0].layout.length / 2) * WALL_SIZE,
+        BALL_HEIGHT,
+        (mazeLayouts[0].start.z - mazeLayouts[0].layout[0].length / 2) * WALL_SIZE,
+      );
+      this.players[playerId].velocity.set(0, 0, 0);
+      this.players[playerId].finishTime = null;
+    });
+    this.publish('game', 'gameStarted', { players: this.players });
+  } else if (this.phase === 'playing' && newTime <= 0) {
+    newPhase = 'ended';
+    newTime = 10;
+    this.updateLeaderboard();
+  } else if (this.phase === 'ended' && newTime <= 0) {
+    this.resetGame();
+    newPhase = 'joining';
+    newTime = 30;
+  }
+
+  this.phase = newPhase;
+  this.timeLeft = newTime;
+  this.publish('game', 'phaseChanged', { phase: this.phase, timeLeft: this.timeLeft, leaderboard: this.leaderboard });
+  
+  this.future(1000).tick();
+}
 
   updateLeaderboard() {
     const finishedPlayers = Object.entries(this.players)
@@ -228,6 +255,7 @@ class MazeView extends Multisynq.View {
   private createCharacter: (playerId: string, isLocal: boolean, color: number) => THREE.Mesh;
   private localPlayerId: string;
   private colorIndex: number;
+  protected model: MazeModel; // Add this line to properly type the model
 
   constructor(
     model: MazeModel,
@@ -242,7 +270,7 @@ class MazeView extends Multisynq.View {
     localPlayerId: string,
   ) {
     super(model);
-    // this.model = model;
+    this.model = model;
     this.setPlayers = setPlayers;
     this.setGamePhase = setGamePhase;
     this.setTimeLeft = setTimeLeft;
@@ -261,11 +289,19 @@ class MazeView extends Multisynq.View {
     this.subscribe('game', 'leaderboardUpdated', this.handleLeaderboardUpdated);
     this.subscribe('game', 'gameReset', this.handleGameReset);
     this.subscribe('player', 'tiltReceived', this.handleTiltReceived);
+      this.subscribe('game', 'gameStarted', this.handleGameStarted);
   }
 
-  handlePlayerJoined = (data: { playerId: string; playerData: Omit<Player, 'character'> }) => {
-  const { playerId, playerData } = data;
+  handlePlayerJoined = (data: { playerId: string; playerData: Omit<Player, 'character'>; gamePhase: string; timeLeft: number }) => {
+  const { playerId, playerData, gamePhase, timeLeft } = data;
   const isLocal = playerId === this.localPlayerId;
+  
+  // Remove this problematic check - the view should just react to data
+  // if (gamePhase !== this.model.phase) {
+  //   this.setGamePhase(gamePhase);
+  //   this.setTimeLeft(timeLeft);
+  // }
+  
   this.setPlayers((prev) => ({
     ...prev,
     [playerId]: {
@@ -273,6 +309,25 @@ class MazeView extends Multisynq.View {
       character: this.createCharacter(playerId, isLocal, playerData.color),
     },
   }));
+};
+
+handleGameStarted = (data: { players: Record<string, Omit<Player, 'character'>> }) => {
+  // Reset all players to start position when game starts
+  this.setPlayers((prev) => {
+    const updatedPlayers = { ...prev };
+    Object.keys(data.players).forEach(playerId => {
+      if (updatedPlayers[playerId]) {
+        updatedPlayers[playerId].position.set(
+          (mazeLayouts[0].start.x - mazeLayouts[0].layout.length / 2) * WALL_SIZE,
+          BALL_HEIGHT,
+          (mazeLayouts[0].start.z - mazeLayouts[0].layout[0].length / 2) * WALL_SIZE,
+        );
+        updatedPlayers[playerId].velocity.set(0, 0, 0);
+        updatedPlayers[playerId].finishTime = null;
+      }
+    });
+    return updatedPlayers;
+  });
 };
 
   handlePositionUpdated = (data: { playerId: string; playerData: Omit<Player, 'character'> }) => {
@@ -494,8 +549,9 @@ const MazeGame = ({
     player.position.y = BALL_HEIGHT;
 
     if (!player.finishTime && player.position.distanceTo(goalPosition.current) < 3.0) {
-      player.finishTime = Date.now() - startTime.current;
-    }
+  // Use the local startTime instead of trying to access model.gameStartTime
+  player.finishTime = Date.now() - startTime.current;
+}
 
     setPlayers((prev) => ({
       ...prev,
@@ -550,24 +606,24 @@ const MazeGame = ({
     const initMultisynq = async () => {
       try {
         const session = await Multisynq.Session.join({
-          apiKey: process.env.NEXT_PUBLIC_MULTISYNQ_API_KEY || 'your_api_key_here',
-          appId: process.env.NEXT_PUBLIC_MULTISYNQ_APP_ID || 'com.monaze.game',
-          name: gameId,
-          password: gameId,
-          model: MazeModel,
-          view: MazeView,
-          viewOptions: [
-            setPlayers,
-            setGamePhase,
-            setTimeLeft,
-            setLeaderboard,
-            onGamePhaseChange,
-            onTimeLeftChange,
-            onLeaderboardChange,
-            createCharacter,
-            localPlayerId.current,
-          ],
-        });
+  apiKey: process.env.NEXT_PUBLIC_MULTISYNQ_API_KEY || 'your_api_key_here',
+  appId: process.env.NEXT_PUBLIC_MULTISYNQ_APP_ID || 'com.monaze.game',
+  name: 'global-maze-game', // Use consistent global name instead of gameId
+  password: 'global-maze-game',
+  model: MazeModel,
+  view: MazeView,
+  viewOptions: [
+    setPlayers,
+    setGamePhase,
+    setTimeLeft,
+    setLeaderboard,
+    onGamePhaseChange,
+    onTimeLeftChange,
+    onLeaderboardChange,
+    createCharacter,
+    localPlayerId.current,
+  ],
+});
         
         sessionRef.current = session;
         viewRef.current = session.view;
@@ -581,12 +637,12 @@ const MazeGame = ({
     };
 
     socket.connect();
-    socket.emit('join-game', {
-      playerId: localPlayerId.current,
-      deviceType: 'display',
-      gameId: gameId,
-    });
-    socket.emit('multisynq-join', localPlayerId.current);
+socket.emit('join-game', {
+  playerId: localPlayerId.current,
+  deviceType: 'display',
+  gameId: 'global-maze-game', // Single global game ID
+});
+socket.emit('multisynq-join', localPlayerId.current);
 
     initMultisynq();
 
@@ -670,14 +726,30 @@ const MazeGame = ({
       });
     }, [scene, camera, players]);
 
-    useFrame(() => {
-      const localPlayerIdKey = Object.keys(players).find((id) => players[id].isLocal);
-      const targetPosition = localPlayerIdKey
-        ? players[localPlayerIdKey].character!.position.clone().add(new THREE.Vector3(0, 16, 16))
-        : new THREE.Vector3(0, 16, 16);
+useFrame(() => {
+  const localPlayerIdKey = Object.keys(players).find((id) => players[id].isLocal);
+  
+  let targetPosition: THREE.Vector3;
+  let lookAtTarget: THREE.Vector3;
+  
+  if (gamePhase === 'joining' || !localPlayerIdKey) {
+    // Show maze overview during joining phase
+    targetPosition = new THREE.Vector3(0, 35, 25);
+    lookAtTarget = new THREE.Vector3(0, 0, 0);
+  } else {
+    // Follow player during game
+    const player = players[localPlayerIdKey];
+    if (player && player.character) {
+      targetPosition = player.character.position.clone().add(new THREE.Vector3(0, 16, 16));
+      lookAtTarget = player.character.position;
+    } else {
+      targetPosition = new THREE.Vector3(0, 35, 25);
+      lookAtTarget = new THREE.Vector3(0, 0, 0);
+    }
+  }
 
-      camera.position.lerp(targetPosition, 0.05);
-      camera.lookAt(localPlayerIdKey ? players[localPlayerIdKey].character!.position : new THREE.Vector3(0, 0, 0));
+  camera.position.lerp(targetPosition, 0.05);
+  camera.lookAt(lookAtTarget);
 
       const time = Date.now() * 0.001;
       if (goalRef.current) {
