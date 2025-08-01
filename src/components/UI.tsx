@@ -222,7 +222,7 @@ const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard }) => {
               margin: '8px 0 0 0',
               maxWidth: '150px',
             }}>
-              Scan to control your player
+              Scan to control using phone
             </p>
           </div>
         )}
@@ -351,7 +351,6 @@ const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard }) => {
         backdropFilter: 'blur(10px)',
         boxShadow: '0 0 15px rgba(212, 0, 255, 0.2)',
       }}>
-        Global MONAZE Game
         {gamePhase === 'playing' && (
           <span style={{ marginLeft: '20px', color: '#00ff00' }}>
             🔴 LIVE
