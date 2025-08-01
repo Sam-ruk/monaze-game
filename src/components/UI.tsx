@@ -351,6 +351,11 @@ const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard }) => {
         backdropFilter: 'blur(10px)',
         boxShadow: '0 0 15px rgba(212, 0, 255, 0.2)',
       }}>
+        {gamePhase !== 'playing' && (
+          <span style={{ marginLeft: '20px', color: '#00ff00' }}>
+            CONNECTING..
+          </span>
+        )}
         {gamePhase === 'playing' && (
           <span style={{ marginLeft: '20px', color: '#00ff00' }}>
             🔴 LIVE
