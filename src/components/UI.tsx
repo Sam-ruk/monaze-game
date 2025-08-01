@@ -1,25 +1,18 @@
 import { useEffect, useState, useRef } from 'react';
 import * as React from 'react';
-
-function getGameId(): string {
-  const now = new Date();
-  const minutes = Math.floor(now.getMinutes() / 10) * 10;
-  const startTime = new Date(now.getFullYear(), now.getMonth(), now.getDate(), now.getHours(), minutes, 0, 0);
-  return `game-${startTime.toISOString()}`;
-}
+import QRCode from 'qrcode';
 
 interface UIProps {
-  gameId: string;
   gamePhase: 'joining' | 'playing' | 'ended';
   timeLeft: number;
   leaderboard: Array<{ playerId: string; info: string }>;
 }
 
-const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => {
+const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard }) => {
   const [elapsed, setElapsed] = useState(0);
   const [showQR, setShowQR] = useState(true);
+  const [localPlayerId] = useState(() => crypto.randomUUID());
   const startTime = useRef(Date.now());
-  const currentGameId = getGameId();
 
   useEffect(() => {
     const interval = setInterval(() => {
@@ -76,27 +69,32 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
       const canvas = canvasRef.current;
       if (!canvas) return;
 
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
-
-      // Simple QR code placeholder - in production you'd use a proper QR library
-      ctx.fillStyle = '#ffffff';
-      ctx.fillRect(0, 0, size, size);
-      
-      ctx.fillStyle = '#000000';
-      ctx.font = '10px monospace';
-      ctx.textAlign = 'center';
-      ctx.fillText('QR CODE', size / 2, size / 2 - 10);
-      ctx.fillText('PLACEHOLDER', size / 2, size / 2 + 5);
-      
-      // Add some pattern
-      for (let i = 0; i < size; i += 20) {
-        for (let j = 0; j < size; j += 20) {
-          if ((i + j) % 40 === 0) {
-            ctx.fillRect(i, j, 10, 10);
+      const generateQR = async () => {
+        try {
+          await QRCode.toCanvas(canvas, value, {
+            width: size,
+            margin: 2,
+            color: {
+              dark: '#000000',
+              light: '#FFFFFF'
+            }
+          });
+        } catch (error) {
+          console.error('Error generating QR code:', error);
+          // Fallback to placeholder if QR generation fails
+          const ctx = canvas.getContext('2d');
+          if (ctx) {
+            ctx.fillStyle = '#ffffff';
+            ctx.fillRect(0, 0, size, size);
+            ctx.fillStyle = '#000000';
+            ctx.font = '10px monospace';
+            ctx.textAlign = 'center';
+            ctx.fillText('QR ERROR', size / 2, size / 2);
           }
         }
-      }
+      };
+
+      generateQR();
     }, [value, size]);
 
     return <canvas ref={canvasRef} width={size} height={size} />;
@@ -162,6 +160,17 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
           </span>
         </div>
 
+        {/* Player ID Display */}
+        <div style={{ 
+          marginBottom: '15px',
+          color: '#cc99ff',
+          fontSize: '0.8em',
+        }}>
+          🎮 Your Player ID: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
+            {localPlayerId.slice(-4)}
+          </span>
+        </div>
+
         {/* QR Code Section */}
         {showQR && (gamePhase === 'joining' || gamePhase === 'ended') && (
           <div style={{ marginTop: '15px' }}>
@@ -176,7 +185,7 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
                 margin: '0',
                 fontSize: '1em',
               }}>
-                📱 Join Game
+                📱 Join with Phone
               </h4>
               <button
                 onClick={() => setShowQR(!showQR)}
@@ -202,7 +211,7 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
               boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)',
             }}>
               <QRCodeCanvas 
-                value={`https://monaze-controller.vercel.app?gameId=${currentGameId}`} 
+                value={`https://monaze-controller.vercel.app?playerId=${localPlayerId}`} 
                 size={120} 
               />
             </div>
@@ -213,7 +222,7 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
               margin: '8px 0 0 0',
               maxWidth: '150px',
             }}>
-              Scan with phone to control
+              Scan to control your player
             </p>
           </div>
         )}
@@ -230,7 +239,8 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
             color: '#00f7ff',
           }}>
             🎯 Navigate the neon maze to reach the white goal!<br />
-            💫 First to finish wins!
+            💫 First to finish wins!<br />
+            👻 Other players appear as shadows
           </div>
         )}
       </div>
@@ -268,22 +278,27 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
             {leaderboard.map((entry, index) => {
               const isFinished = entry.info.includes('Finished');
               const isWinner = index === 0 && isFinished;
+              const isLocalPlayer = entry.playerId === localPlayerId;
               
               return (
                 <div
                   key={`${entry.playerId}-${index}`}
                   style={{
                     padding: '10px',
-                    background: isWinner 
-                      ? 'linear-gradient(45deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.2))'
-                      : isFinished 
-                        ? 'rgba(0, 255, 0, 0.1)' 
-                        : 'rgba(212, 0, 255, 0.1)',
-                    border: isWinner 
-                      ? '2px solid #ffd700'
-                      : isFinished 
-                        ? '1px solid #00ff00' 
-                        : '1px solid #d400ff',
+                    background: isLocalPlayer
+                      ? 'linear-gradient(45deg, rgba(212, 0, 255, 0.3), rgba(212, 0, 255, 0.2))'
+                      : isWinner 
+                        ? 'linear-gradient(45deg, rgba(255, 215, 0, 0.2), rgba(255, 165, 0, 0.2))'
+                        : isFinished 
+                          ? 'rgba(0, 255, 0, 0.1)' 
+                          : 'rgba(212, 0, 255, 0.1)',
+                    border: isLocalPlayer
+                      ? '2px solid #d400ff'
+                      : isWinner 
+                        ? '2px solid #ffd700'
+                        : isFinished 
+                          ? '1px solid #00ff00' 
+                          : '1px solid #d400ff',
                     borderRadius: '8px',
                     display: 'flex',
                     justifyContent: 'space-between',
@@ -299,10 +314,10 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
                       {isWinner ? '👑' : `${index + 1}.`}
                     </span>
                     <span style={{ 
-                      color: isWinner ? '#ffd700' : '#ffffff',
-                      fontWeight: isWinner ? 'bold' : 'normal',
+                      color: isLocalPlayer ? '#d400ff' : isWinner ? '#ffd700' : '#ffffff',
+                      fontWeight: isLocalPlayer || isWinner ? 'bold' : 'normal',
                     }}>
-                      P{entry.playerId.slice(-4)}
+                      {isLocalPlayer ? 'You' : `P${entry.playerId.slice(-4)}`}
                     </span>
                   </div>
                   
@@ -336,9 +351,7 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
         backdropFilter: 'blur(10px)',
         boxShadow: '0 0 15px rgba(212, 0, 255, 0.2)',
       }}>
-        Game ID: <span style={{ color: '#00f7ff', fontWeight: 'bold' }}>
-          {gameId.slice(-8)}
-        </span>
+        Global MONAZE Game
         {gamePhase === 'playing' && (
           <span style={{ marginLeft: '20px', color: '#00ff00' }}>
             🔴 LIVE
@@ -376,7 +389,7 @@ const UI: React.FC<UIProps> = ({ gameId, gamePhase, timeLeft, leaderboard }) => 
             color: '#ffffff',
           }}>
             Winner: <span style={{ color: '#ffd700', fontWeight: 'bold' }}>
-              Player {leaderboard[0]?.playerId.slice(-4)}
+              {leaderboard[0]?.playerId === localPlayerId ? 'You!' : `Player ${leaderboard[0]?.playerId.slice(-4)}`}
             </span>
           </p>
           <p style={{ 

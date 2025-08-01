@@ -9,35 +9,42 @@ interface TiltData {
   timestamp?: number;
 }
 
-interface GameJoinData {
+interface PlayerJoinData {
   playerId: string;
   deviceType: 'controller' | 'display';
-  gameId: string;
 }
 
 interface PlayerConnectedData {
   playerId: string;
   deviceType: 'controller' | 'display';
   totalPlayers: number;
+  hasController: boolean;
+  hasDisplay: boolean;
 }
 
-interface GamePhaseData {
-  phase: 'joining' | 'playing' | 'ended';
-  timeLeft: number;
-  gameId: string;
+interface DeviceDisconnectedData {
+  playerId: string;
+  deviceType: string;
+  hasController: boolean;
+  hasDisplay: boolean;
+}
+
+interface QRCodeData {
+  playerId: string;
+  url: string;
 }
 
 interface SocketEvents {
   'tilt-data': (data: TiltData) => void;
-  'tilt-update': (data: { tiltX: number; tiltZ: number; playerId: string }) => void;
-  'join-game': (data: GameJoinData) => void;
-  'joined-game': (data: { playerId: string; message: string; gameId: string }) => void;
+  'join-player': (data: PlayerJoinData) => void;
+  'joined-player': (data: { playerId: string; deviceType: string; message: string }) => void;
   'player-connected': (data: PlayerConnectedData) => void;
   'player-disconnected': (data: { playerId: string; totalPlayers: number }) => void;
-  'game-phase': (data: GamePhaseData) => void;
-  'game-reset': (data: { gameId: string }) => void;
+  'device-disconnected': (data: DeviceDisconnectedData) => void;
   'multisynq-join': (playerId: string) => void;
   'multisynq-ready': (data: { success: boolean; playerId: string }) => void;
+  'request-qr': (data: { playerId: string }) => void;
+  'qr-code': (data: QRCodeData) => void;
   'connection-error': (error: { message: string; code?: string }) => void;
   'game-error': (error: { message: string; playerId: string }) => void;
 }
@@ -50,7 +57,7 @@ export const socket: Socket<SocketEvents> = io('https://samkdev.xyz', {
   reconnection: true,
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
-  reconnectionAttempts: 5, // Changed from maxReconnectionAttempts
+  reconnectionAttempts: 5,
   forceNew: true
 });
 
