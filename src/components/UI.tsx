@@ -150,15 +150,15 @@ const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard }) => {
         </div>
 
         {/* Player Count */}
-        <div style={{ 
-          marginBottom: '15px',
-          color: '#cc99ff',
-          fontSize: '0.9em',
-        }}>
-          👥 Players Connected: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
-            {leaderboard.length}
-          </span>
-        </div>
+<div style={{ 
+  marginBottom: '15px',
+  color: '#cc99ff',
+  fontSize: '0.9em',
+}}>
+  👥 Active Players: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
+    {Math.ceil(leaderboard.length)} {/* Since each player might have 2 devices, count unique players */}
+  </span>
+</div>
 
         {/* Player ID Display */}
         <div style={{ 

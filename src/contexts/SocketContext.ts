@@ -58,7 +58,7 @@ export const socket: Socket<SocketEvents> = io('https://samkdev.xyz', {
   reconnectionDelay: 1000,
   reconnectionDelayMax: 5000,
   reconnectionAttempts: 5,
-  forceNew: true
+  forceNew: false
 });
 
 export const SocketContext = createContext(socket);
