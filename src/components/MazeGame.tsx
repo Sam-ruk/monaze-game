@@ -472,6 +472,7 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
   if (isLocal) setCharacter(mesh);
   return mesh;
 };
+
   const checkWallCollisions = (position: THREE.Vector3) => {
     const collisions: { axis: string; normal: number; penetration: number; correctedPos: number }[] = [];
 
@@ -707,7 +708,7 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
 
   useEffect(() => {
     scene.fog = new THREE.Fog(0x330066, 5, 60);
-    camera.position.set(0, 15, 10); // Much closer initial position
+    camera.position.set(0, 25, 25);
     camera.lookAt(0, 0, 0);
 
     const ambientLight = new THREE.AmbientLight(0x404040, 0.7);
@@ -724,28 +725,47 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
     scene.add(violetLight);
   }, [scene, camera]);
 
-  useFrame(() => {
-  const localPlayer = Object.values(players).find(p => p.isLocal);
-  
-  let targetPosition: THREE.Vector3;
-  let lookAtTarget: THREE.Vector3;
-  
-  if (gamePhase === 'joining' || !localPlayer) {
-    // Show maze overview during joining phase
-    targetPosition = new THREE.Vector3(0, 25, 25);
-    lookAtTarget = new THREE.Vector3(0, 0, 0);
-  } else {
-    // Follow player during game
-    targetPosition = new THREE.Vector3(
-      localPlayer.position.x, 
-      localPlayer.position.y + 15, 
-      localPlayer.position.z + 15
-    );
-    lookAtTarget = new THREE.Vector3(localPlayer.position.x, localPlayer.position.y, localPlayer.position.z);
-  }
+  // Add player characters to scene
+  useEffect(() => {
+    Object.values(players).forEach(player => {
+      if (player.character && !scene.children.includes(player.character)) {
+        scene.add(player.character);
+        console.log(`Added player character to scene: ${player.isLocal ? 'LOCAL' : 'REMOTE'}`);
+      }
+    });
 
-  camera.position.lerp(targetPosition, 0.05);
-  camera.lookAt(lookAtTarget);
+    // Cleanup function to remove characters when component unmounts
+    return () => {
+      Object.values(players).forEach(player => {
+        if (player.character && scene.children.includes(player.character)) {
+          scene.remove(player.character);
+        }
+      });
+    };
+  }, [players, scene]);
+
+  useFrame(() => {
+    const localPlayer = Object.values(players).find(p => p.isLocal);
+    
+    let targetPosition: THREE.Vector3;
+    let lookAtTarget: THREE.Vector3;
+    
+    if (gamePhase === 'joining' || !localPlayer) {
+      // Show maze overview during joining phase
+      targetPosition = new THREE.Vector3(0, 25, 25);
+      lookAtTarget = new THREE.Vector3(0, 0, 0);
+    } else {
+      // Follow player during game
+      targetPosition = new THREE.Vector3(
+        localPlayer.position.x, 
+        localPlayer.position.y + 15, 
+        localPlayer.position.z + 15
+      );
+      lookAtTarget = new THREE.Vector3(localPlayer.position.x, localPlayer.position.y, localPlayer.position.z);
+    }
+
+    camera.position.lerp(targetPosition, 0.05);
+    camera.lookAt(lookAtTarget);
 
     const time = Date.now() * 0.001;
     if (goalRef.current) {
@@ -753,23 +773,35 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
     }
 
     // Update all character positions and labels
-    Object.values(players).forEach((p) => {
-      if (p.character && p.position) {
-        p.character.position.copy(p.position);
+    Object.values(players).forEach((player) => {
+      if (player.character && player.position) {
+        player.character.position.copy(player.position);
         
         // Update label position
-        if (p.character.userData.label) {
-          const screenPos = p.character.position.clone().project(camera);
+        if (player.character.userData.label) {
+          const screenPos = player.character.position.clone().project(camera);
           const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
           const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
-          p.character.userData.label.style.left = `${x}px`;
-          p.character.userData.label.style.top = `${y}px`;
+          player.character.userData.label.style.left = `${x}px`;
+          player.character.userData.label.style.top = `${y}px`;
+          player.character.userData.label.style.visibility = 'visible';
+          player.character.userData.label.style.zIndex = '1000';
         }
       }
     });
   });
 
-    const maze = (
+  useEffect(() => {
+    goalPosition.current.set(
+      (currentMaze.goal.x - currentMaze.layout.length / 2) * WALL_SIZE,
+      WALL_HEIGHT + 1.0,
+      (currentMaze.goal.z - currentMaze.layout[0].length / 2) * WALL_SIZE,
+    );
+  }, [currentMaze]);
+
+  return (
+    <>
+      {/* Maze walls and floor */}
       <group>
         {currentMaze.layout.map((row, x) =>
           row.map((cell, z) => {
@@ -802,6 +834,8 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
             return null;
           }),
         )}
+        
+        {/* Floor */}
         <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
           <planeGeometry args={[currentMaze.layout.length * WALL_SIZE, currentMaze.layout[0].length * WALL_SIZE]} />
           <meshStandardMaterial
@@ -814,6 +848,8 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
             opacity={0.9}
           />
         </mesh>
+        
+        {/* Goal */}
         <mesh
           ref={goalRef}
           position={[
@@ -822,39 +858,24 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
             (currentMaze.goal.z - currentMaze.layout[0].length / 2) * WALL_SIZE,
           ]}
           rotation={[-Math.PI / 2, 0, 0]}
-          userData={{ isGoal: true }}
         >
           <planeGeometry args={[3, 3]} />
           <meshBasicMaterial color={0xffffff} transparent opacity={0.9} side={THREE.DoubleSide} />
         </mesh>
       </group>
-    );
 
-    useEffect(() => {
-      goalPosition.current.set(
-        (currentMaze.goal.x - currentMaze.layout.length / 2) * WALL_SIZE,
-        WALL_HEIGHT + 1.0,
-        (currentMaze.goal.z - currentMaze.layout[0].length / 2) * WALL_SIZE,
-      );
-    }, [currentMaze]);
-
-    return (
-      <>
-        {maze}
-
-      {/* Render all player characters */}
+      {/* Render all player characters using primitive */}
       {Object.entries(players).map(([playerId, player]) => (
-      player.character ? (
-        <primitive 
-          key={playerId} 
-          object={player.character} 
-          position={[player.position.x, player.position.y, player.position.z]}
-        />
-      ) : null
-    ))}
-      </>
-    );
-  };
+        player.character ? (
+          <primitive 
+            key={playerId} 
+            object={player.character}
+          />
+        ) : null
+      ))}
+    </>
+  );
+};
 
   return (
     <div style={{ width: '100vw', height: '100vh' }}>
