@@ -256,48 +256,48 @@ class MazeView extends Multisynq.View {
   protected model: MazeModel;
 
   constructor(
-    model: MazeModel,
-    setPlayers: React.Dispatch<React.SetStateAction<Record<string, Player>>>,
-    setGamePhase: React.Dispatch<React.SetStateAction<'joining' | 'playing' | 'ended'>>,
-    setTimeLeft: React.Dispatch<React.SetStateAction<number>>,
-    setLeaderboard: React.Dispatch<React.SetStateAction<Array<{ playerId: string; info: string }>>>,
-    onGamePhaseChange: (phase: 'joining' | 'playing' | 'ended') => void,
-    onTimeLeftChange: (timeLeft: number) => void,
-    onLeaderboardChange: (leaderboard: Array<{ playerId: string; info: string }>) => void,
-    createCharacter: (playerId: string, isLocal: boolean, color: number) => THREE.Mesh,
-    localPlayerId: string,
-  ) {
-    super(model);
-    this.model = model;
-    this.setPlayers = setPlayers;
-    this.setGamePhase = setGamePhase;
-    this.setTimeLeft = setTimeLeft;
-    this.setLeaderboard = setLeaderboard;
-    this.onGamePhaseChange = onGamePhaseChange;
-    this.onTimeLeftChange = onTimeLeftChange;
-    this.onLeaderboardChange = onLeaderboardChange;
-    this.createCharacter = createCharacter;
-    this.localPlayerId = localPlayerId;
-    this.colorIndex = 0;
+  model: MazeModel,
+  setPlayers: React.Dispatch<React.SetStateAction<Record<string, Player>>>,
+  setGamePhase: React.Dispatch<React.SetStateAction<'joining' | 'playing' | 'ended'>>,
+  setTimeLeft: React.Dispatch<React.SetStateAction<number>>,
+  setLeaderboard: React.Dispatch<React.SetStateAction<Array<{ playerId: string; info: string }>>>,
+  onGamePhaseChange: (phase: 'joining' | 'playing' | 'ended') => void,
+  onTimeLeftChange: (timeLeft: number) => void,
+  onLeaderboardChange: (leaderboard: Array<{ playerId: string; info: string }>) => void,
+  createCharacter: (playerId: string, isLocal: boolean, color: number) => THREE.Mesh,
+  localPlayerId: string,
+) {
+  super(model);
+  this.model = model;
+  this.setPlayers = setPlayers;
+  this.setGamePhase = setGamePhase;           // Make sure this line exists
+  this.setTimeLeft = setTimeLeft;             // Make sure this line exists  
+  this.setLeaderboard = setLeaderboard;       // Make sure this line exists
+  this.onGamePhaseChange = onGamePhaseChange;
+  this.onTimeLeftChange = onTimeLeftChange;
+  this.onLeaderboardChange = onLeaderboardChange;
+  this.createCharacter = createCharacter;
+  this.localPlayerId = localPlayerId;
+  this.colorIndex = 0;
 
-    // Bind the handlers properly
-    this.handlePlayerJoined = this.handlePlayerJoined.bind(this);
-    this.handlePositionUpdated = this.handlePositionUpdated.bind(this);
-    this.handlePhaseChanged = this.handlePhaseChanged.bind(this);
-    this.handleLeaderboardUpdated = this.handleLeaderboardUpdated.bind(this);
-    this.handleGameReset = this.handleGameReset.bind(this);
-    this.handleTiltReceived = this.handleTiltReceived.bind(this);
-    this.handleGameStarted = this.handleGameStarted.bind(this);
+  // Bind the handlers properly
+  this.handlePlayerJoined = this.handlePlayerJoined.bind(this);
+  this.handlePositionUpdated = this.handlePositionUpdated.bind(this);
+  this.handlePhaseChanged = this.handlePhaseChanged.bind(this);
+  this.handleLeaderboardUpdated = this.handleLeaderboardUpdated.bind(this);
+  this.handleGameReset = this.handleGameReset.bind(this);
+  this.handleTiltReceived = this.handleTiltReceived.bind(this);
+  this.handleGameStarted = this.handleGameStarted.bind(this);
 
-    // Subscribe to model events
-    this.subscribe('player', 'joined', this.handlePlayerJoined);
-    this.subscribe('player', 'positionUpdated', this.handlePositionUpdated);
-    this.subscribe('game', 'phaseChanged', this.handlePhaseChanged);
-    this.subscribe('game', 'leaderboardUpdated', this.handleLeaderboardUpdated);
-    this.subscribe('game', 'gameReset', this.handleGameReset);
-    this.subscribe('player', 'tiltReceived', this.handleTiltReceived);
-    this.subscribe('game', 'gameStarted', this.handleGameStarted);
-  }
+  // Subscribe to model events
+  this.subscribe('player', 'joined', this.handlePlayerJoined);
+  this.subscribe('player', 'positionUpdated', this.handlePositionUpdated);
+  this.subscribe('game', 'phaseChanged', this.handlePhaseChanged);
+  this.subscribe('game', 'leaderboardUpdated', this.handleLeaderboardUpdated);
+  this.subscribe('game', 'gameReset', this.handleGameReset);
+  this.subscribe('player', 'tiltReceived', this.handleTiltReceived);
+  this.subscribe('game', 'gameStarted', this.handleGameStarted);
+}
 
   handlePlayerJoined(data: { playerId: string; playerData: Omit<Player, 'character'>; gamePhase: string; timeLeft: number }) {
   const { playerId, playerData } = data;
@@ -635,15 +635,15 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
         model: MazeModel,
         view: MazeView,
         viewOptions: [
-          setPlayers,
-          setGamePhase,
-          setTimeLeft,
-          setLeaderboard,
-          onGamePhaseChange,
-          onTimeLeftChange,
-          onLeaderboardChange,
-          createCharacter,
-          localPlayerId.current,
+          setPlayers,        // 0
+          setGamePhase,      // 1  
+          setTimeLeft,       // 2
+          setLeaderboard,    // 3
+          onGamePhaseChange, // 4
+          onTimeLeftChange,  // 5
+          onLeaderboardChange, // 6
+          createCharacter,   // 7
+          localPlayerId.current, // 8
         ],
       });
       
