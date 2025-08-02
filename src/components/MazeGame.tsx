@@ -627,24 +627,33 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
   useEffect(() => {
   const initMultisynq = async () => {
     try {
+      // Create a custom view class that properly receives the options
+      class CustomMazeView extends MazeView {
+        constructor(model: MazeModel) {
+          // Pass the React setters directly instead of through viewOptions
+          super(
+            model,
+            setPlayers,
+            setGamePhase,
+            setTimeLeft,
+            setLeaderboard,
+            onGamePhaseChange,
+            onTimeLeftChange,
+            onLeaderboardChange,
+            createCharacter,
+            localPlayerId.current
+          );
+        }
+      }
+
       const session = await Multisynq.Session.join({
         apiKey: process.env.NEXT_PUBLIC_MULTISYNQ_API_KEY || 'your_api_key_here',
         appId: process.env.NEXT_PUBLIC_MULTISYNQ_APP_ID || 'com.monaze.game',
         name: 'global-maze-game',
         password: 'global-maze-game',
         model: MazeModel,
-        view: MazeView,
-        viewOptions: [
-          setPlayers,        // 0
-          setGamePhase,      // 1  
-          setTimeLeft,       // 2
-          setLeaderboard,    // 3
-          onGamePhaseChange, // 4
-          onTimeLeftChange,  // 5
-          onLeaderboardChange, // 6
-          createCharacter,   // 7
-          localPlayerId.current, // 8
-        ],
+        view: CustomMazeView,
+        // Remove viewOptions since we're passing them directly in constructor
       });
       
       sessionRef.current = session;
