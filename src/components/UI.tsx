@@ -217,7 +217,7 @@ const [localPlayerId] = useState(() => crypto.randomUUID().slice(-6).toUpperCase
               boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)',
             }}>
               <QRCodeCanvas 
-  value={`https://monaze-controller.vercel.app/id=${localPlayerId.slice(-6)}`} 
+  value={`https://monaze-controller.vercel.app/?playerId=${localPlayerId.slice(-6)}`} 
   size={120} 
 />
             </div>
