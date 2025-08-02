@@ -16,6 +16,7 @@ interface MazeGameProps {
   onGamePhaseChange: (phase: 'joining' | 'playing' | 'ended') => void;
   onTimeLeftChange: (timeLeft: number) => void;
   onLeaderboardChange: (leaderboard: any[]) => void;
+  onPlayerCountChange: (count: number) => void; // Add this line
 }
 
 interface Player {
@@ -302,7 +303,7 @@ class MazeView extends Multisynq.View {
   const { playerId, playerData } = data;
   const isLocal = playerId === this.localPlayerId;
   
-  // Only create character if it doesn't already exist
+  // Only create player if it doesn't exist AND this is a display device joining
   this.setPlayers((prev) => {
     if (prev[playerId]) {
       // Player already exists, just update data
@@ -311,11 +312,11 @@ class MazeView extends Multisynq.View {
         [playerId]: {
           ...prev[playerId],
           ...playerData,
-          isLocal: isLocal || prev[playerId].isLocal, // Keep local status if already set
+          isLocal: isLocal || prev[playerId].isLocal,
         },
       };
     } else {
-      // New player, create character
+      // New player, create character ONLY for display device
       return {
         ...prev,
         [playerId]: {
@@ -423,6 +424,7 @@ const MazeGame = ({
   onGamePhaseChange,
   onTimeLeftChange,
   onLeaderboardChange,
+  onPlayerCountChange, // Add this parameter
 }: MazeGameProps) => {
   const socket = useContext(SocketContext);
   const [currentMaze, setCurrentMaze] = useState(mazeLayouts[Math.floor(Math.random() * mazeLayouts.length)]);
@@ -592,6 +594,11 @@ const MazeGame = ({
     };
   }, [players, gamePhase]);
 
+  useEffect(() => {
+    const playerCount = Object.keys(players).length;
+    onPlayerCountChange(playerCount);
+  }, [players, onPlayerCountChange]);
+
   const resetGame = () => {
     setCurrentMaze(mazeLayouts[Math.floor(Math.random() * mazeLayouts.length)]);
     setPlayers((prev) => {
@@ -641,7 +648,7 @@ const MazeGame = ({
       sessionRef.current = session;
       viewRef.current = session.view;
 
-      // Join the local player
+      // Join the local player ONLY for display device
       session.view.joinPlayer(localPlayerId.current);
       
     } catch (error) {
@@ -653,6 +660,7 @@ const MazeGame = ({
     socket.connect();
   }
   
+  // Join as display device
   socket.emit('join-player', {
     playerId: localPlayerId.current,
     deviceType: 'display',
@@ -665,30 +673,25 @@ const MazeGame = ({
       sessionRef.current.leave();
       sessionRef.current = null;
     }
-    // Don't disconnect socket here, let it handle reconnection
   };
 }, [onGamePhaseChange, onTimeLeftChange, onLeaderboardChange]);
 
   useEffect(() => {
-    socket.on('tilt-data', (data: TiltData) => {
-      const { playerId, tiltX, tiltZ } = data;
-      if (players[playerId] && gamePhase === 'playing') {
-        updateCharacterPhysics(playerId, tiltX, tiltZ);
-        if (viewRef.current) {
-          viewRef.current.sendTiltData(playerId, tiltX, tiltZ);
-        }
+  socket.on('tilt-data', (data: TiltData) => {
+    const { playerId, tiltX, tiltZ } = data;
+    // Only update if player exists in our game and game is playing
+    if (players[playerId] && gamePhase === 'playing') {
+      updateCharacterPhysics(playerId, tiltX, tiltZ);
+      if (viewRef.current) {
+        viewRef.current.sendTiltData(playerId, tiltX, tiltZ);
       }
-    });
+    }
+  });
 
-    return () => {
-      socket.off('tilt-data');
-      Object.values(players).forEach((player) => {
-        if (player.character?.userData?.label) {
-          document.body.removeChild(player.character.userData.label);
-        }
-      });
-    };
-  }, [socket, gamePhase, players, currentMaze]);
+  return () => {
+    socket.off('tilt-data');
+  };
+}, [socket, gamePhase, players]);
 
   useEffect(() => {
     window.resetGame = resetGame;
@@ -703,7 +706,7 @@ const MazeGame = ({
 
   useEffect(() => {
     scene.fog = new THREE.Fog(0x330066, 5, 60);
-    camera.position.set(0, 25, 20); // Bring camera closer
+    camera.position.set(0, 15, 10); // Much closer initial position
     camera.lookAt(0, 0, 0);
 
     const ambientLight = new THREE.AmbientLight(0x404040, 0.7);
@@ -712,74 +715,52 @@ const MazeGame = ({
     const neonLight = new THREE.PointLight(0xd400ff, 1.2, 60);
     neonLight.position.set(-15, 15, -15);
     neonLight.castShadow = true;
-    neonLight.shadow.mapSize.width = 1024;
-    neonLight.shadow.mapSize.height = 1024;
     scene.add(neonLight);
 
     const violetLight = new THREE.PointLight(0xcc99ff, 1.2, 60);
     violetLight.position.set(15, 15, 15);
     violetLight.castShadow = true;
-    violetLight.shadow.mapSize.width = 1024;
-    violetLight.shadow.mapSize.height = 1024;
     scene.add(violetLight);
-
-    // Add all player meshes to scene
-    Object.entries(players).forEach(([playerId, player]) => {
-      if (player.character && !scene.children.includes(player.character)) {
-        scene.add(player.character);
-      }
-    });
-  }, [scene, camera, players]);
+  }, [scene, camera]);
 
   useFrame(() => {
-  const localPlayer = Object.values(players).find(p => p.isLocal);
-  
-  let targetPosition: THREE.Vector3;
-  let lookAtTarget: THREE.Vector3;
-  
-  if (gamePhase === 'joining' || !localPlayer) {
-    // Show maze overview during joining phase - MUCH CLOSER
-    targetPosition = new THREE.Vector3(0, 15, 10);
-    lookAtTarget = new THREE.Vector3(0, 0, 0);
-  } else {
-    // Follow player during game
-    if (localPlayer) {
-      targetPosition = new THREE.Vector3(
-        localPlayer.position.x, 
-        localPlayer.position.y + 8, 
-        localPlayer.position.z + 8
-      );
-      lookAtTarget = new THREE.Vector3(localPlayer.position.x, localPlayer.position.y, localPlayer.position.z);
-    } else {
+    const localPlayer = Object.values(players).find(p => p.isLocal);
+    
+    let targetPosition: THREE.Vector3;
+    let lookAtTarget: THREE.Vector3;
+    
+    if (gamePhase === 'joining' || !localPlayer) {
+      // Show maze overview during joining phase
       targetPosition = new THREE.Vector3(0, 15, 10);
       lookAtTarget = new THREE.Vector3(0, 0, 0);
+    } else {
+      // Follow player during game - much closer camera
+      targetPosition = new THREE.Vector3(
+        localPlayer.position.x, 
+        localPlayer.position.y + 6, 
+        localPlayer.position.z + 6
+      );
+      lookAtTarget = new THREE.Vector3(localPlayer.position.x, localPlayer.position.y, localPlayer.position.z);
     }
-  }
 
-  camera.position.lerp(targetPosition, 0.05);
-  camera.lookAt(lookAtTarget);
+    camera.position.lerp(targetPosition, 0.05);
+    camera.lookAt(lookAtTarget);
 
     const time = Date.now() * 0.001;
     if (goalRef.current) {
       goalRef.current.position.y = WALL_HEIGHT + 1.0 + Math.sin(time) * 0.3;
-      goalRef.current.rotation.z = Math.sin(time * 0.5) * 0.1;
-      goalRef.current.rotation.y = Math.cos(time * 0.5) * 0.1;
     }
 
+    // Update all character positions and labels
     Object.values(players).forEach((p) => {
       if (p.character && p.position) {
         p.character.position.copy(p.position);
         
-        // Update player light position
-        if (p.character.userData.light) {
-          p.character.userData.light.position.copy(p.character.position);
-          p.character.userData.light.position.y += 5;
-        }
-        
-        const screenPos = p.character.position.clone().project(camera);
-        const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
-        const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
+        // Update label position
         if (p.character.userData.label) {
+          const screenPos = p.character.position.clone().project(camera);
+          const x = (screenPos.x * 0.5 + 0.5) * window.innerWidth;
+          const y = (-screenPos.y * 0.5 + 0.5) * window.innerHeight;
           p.character.userData.label.style.left = `${x}px`;
           p.character.userData.label.style.top = `${y}px`;
         }
@@ -860,83 +841,93 @@ const MazeGame = ({
       <>
         {maze}
         <group>
-      {currentMaze.layout.map((row, x) =>
-        row.map((cell, z) => {
-          if (cell === 1) {
-            return (
-              <mesh
-                key={`${x}-${z}`}
-                position={[
-                  (x - currentMaze.layout.length / 2) * WALL_SIZE,
-                  WALL_HEIGHT / 2,
-                  (z - currentMaze.layout[0].length / 2) * WALL_SIZE,
-                ]}
-                castShadow
-                receiveShadow
-                ref={(ref) => {
-                  if (ref && !walls.current.includes(ref)) walls.current.push(ref);
-                }}
-              >
-                <boxGeometry args={[WALL_SIZE, WALL_HEIGHT, WALL_SIZE]} />
-                <meshStandardMaterial
-                  color={0xd400ff}
-                  emissive={0xd400ff}
-                  emissiveIntensity={1.0}
-                  metalness={0.6}
-                  roughness={0.2}
-                />
-              </mesh>
-            );
-          }
-          return null;
-        }),
-      )}
-      <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
-        <planeGeometry args={[currentMaze.layout.length * WALL_SIZE, currentMaze.layout[0].length * WALL_SIZE]} />
-        <meshStandardMaterial
-          color={0x00f7ff}
-          emissive={0x00f7ff}
-          emissiveIntensity={1.1}
-          metalness={0.5}
-          roughness={0.3}
-          transparent
-          opacity={0.9}
-        />
-      </mesh>
-      <mesh
-        ref={goalRef}
-        position={[
-          (currentMaze.goal.x - currentMaze.layout.length / 2) * WALL_SIZE,
-          WALL_HEIGHT + 1.0,
-          (currentMaze.goal.z - currentMaze.layout[0].length / 2) * WALL_SIZE,
-        ]}
-        rotation={[-Math.PI / 2, 0, 0]}
-        userData={{ isGoal: true }}
-      >
-        <planeGeometry args={[3, 3]} />
-        <meshBasicMaterial color={0xffffff} transparent opacity={0.9} side={THREE.DoubleSide} />
-      </mesh>
-    </group>
-    
-    {/* ACTUALLY RENDER THE PLAYERS */}
-    {Object.entries(players).map(([playerId, player]) => (
-      <mesh
-        key={playerId}
-        position={[player.position.x, player.position.y, player.position.z]}
-        castShadow
-      >
-        <sphereGeometry args={[BALL_RADIUS, 32, 32]} />
-        <meshStandardMaterial
-          color={player.color}
-          emissive={player.color}
-          emissiveIntensity={player.isLocal ? 0.8 : 0.4}
-          metalness={0.7}
-          roughness={0.3}
-          transparent
-          opacity={player.isLocal ? 1.0 : 0.5}
-        />
-      </mesh>
-    ))}
+        {currentMaze.layout.map((row, x) =>
+          row.map((cell, z) => {
+            if (cell === 1) {
+              return (
+                <mesh
+                  key={`${x}-${z}`}
+                  position={[
+                    (x - currentMaze.layout.length / 2) * WALL_SIZE,
+                    WALL_HEIGHT / 2,
+                    (z - currentMaze.layout[0].length / 2) * WALL_SIZE,
+                  ]}
+                  castShadow
+                  receiveShadow
+                  ref={(ref) => {
+                    if (ref && !walls.current.includes(ref)) walls.current.push(ref);
+                  }}
+                >
+                  <boxGeometry args={[WALL_SIZE, WALL_HEIGHT, WALL_SIZE]} />
+                  <meshStandardMaterial
+                    color={0xd400ff}
+                    emissive={0xd400ff}
+                    emissiveIntensity={1.0}
+                    metalness={0.6}
+                    roughness={0.2}
+                  />
+                </mesh>
+              );
+            }
+            return null;
+          }),
+        )}
+        
+        {/* Floor */}
+        <mesh rotation={[-Math.PI / 2, 0, 0]} position={[0, FLOOR_Y, 0]} receiveShadow>
+          <planeGeometry args={[currentMaze.layout.length * WALL_SIZE, currentMaze.layout[0].length * WALL_SIZE]} />
+          <meshStandardMaterial
+            color={0x00f7ff}
+            emissive={0x00f7ff}
+            emissiveIntensity={1.1}
+            metalness={0.5}
+            roughness={0.3}
+            transparent
+            opacity={0.9}
+          />
+        </mesh>
+        
+        {/* Goal */}
+        <mesh
+          ref={goalRef}
+          position={[
+            (currentMaze.goal.x - currentMaze.layout.length / 2) * WALL_SIZE,
+            WALL_HEIGHT + 1.0,
+            (currentMaze.goal.z - currentMaze.layout[0].length / 2) * WALL_SIZE,
+          ]}
+          rotation={[-Math.PI / 2, 0, 0]}
+        >
+          <planeGeometry args={[3, 3]} />
+          <meshBasicMaterial color={0xffffff} transparent opacity={0.9} side={THREE.DoubleSide} />
+        </mesh>
+      </group>
+
+      {/* Render all player characters */}
+      {Object.entries(players).map(([playerId, player]) => (
+        <mesh
+          key={playerId}
+          position={[player.position.x, player.position.y, player.position.z]}
+          castShadow
+          ref={(ref) => {
+            if (ref && !player.character) {
+              // If character mesh doesn't exist, assign this one
+              player.character = ref;
+              if (player.isLocal) setCharacter(ref);
+            }
+          }}
+        >
+          <sphereGeometry args={[BALL_RADIUS, 32, 32]} />
+          <meshStandardMaterial
+            color={player.color}
+            emissive={player.color}
+            emissiveIntensity={player.isLocal ? 0.8 : 0.4}
+            metalness={0.7}
+            roughness={0.3}
+            transparent
+            opacity={player.isLocal ? 1.0 : 0.5}
+          />
+        </mesh>
+      ))}
       </>
     );
   };

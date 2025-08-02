@@ -6,9 +6,10 @@ interface UIProps {
   gamePhase: 'joining' | 'playing' | 'ended';
   timeLeft: number;
   leaderboard: Array<{ playerId: string; info: string }>;
+  playerCount?: number; // Add this new prop
 }
 
-const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard }) => {
+const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard, playerCount = 0 }) => {
   const [elapsed, setElapsed] = useState(0);
   const [showQR, setShowQR] = useState(true);
   const [localPlayerId] = useState(() => crypto.randomUUID());
@@ -150,15 +151,15 @@ const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard }) => {
         </div>
 
        {/* Player Count */}
-<div style={{ 
-  marginBottom: '15px',
-  color: '#cc99ff',
-  fontSize: '0.9em',
-}}>
-  👥 Players Connected: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
-    {Object.keys(players).length} {/* Count actual players, not leaderboard entries */}
-  </span>
-</div>
+  <div style={{ 
+    marginBottom: '15px',
+    color: '#cc99ff',
+    fontSize: '0.9em',
+  }}>
+    👥 Players Connected: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
+      {playerCount} {/* Use the prop instead of Object.keys(players).length */}
+    </span>
+  </div>
 
         {/* Player ID Display */}
         <div style={{ 
@@ -211,9 +212,9 @@ const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard }) => {
               boxShadow: '0 4px 15px rgba(0, 0, 0, 0.3)',
             }}>
               <QRCodeCanvas 
-                value={`https://monaze-controller.vercel.app?playerId=${localPlayerId}`} 
-                size={120} 
-              />
+  value={`https://monaze-controller.vercel.app/${localPlayerId.slice(-6)}`} 
+  size={120} 
+/>
             </div>
             
             <p style={{ 
