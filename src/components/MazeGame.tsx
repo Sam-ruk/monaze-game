@@ -303,7 +303,7 @@ class MazeView extends Multisynq.View {
   const { playerId, playerData } = data;
   const isLocal = playerId === this.localPlayerId;
   
-  // Only create player if it doesn't exist AND this is a display device joining
+  // Create player ONLY if it doesn't exist
   this.setPlayers((prev) => {
     if (prev[playerId]) {
       // Player already exists, just update data
@@ -316,13 +316,14 @@ class MazeView extends Multisynq.View {
         },
       };
     } else {
-      // New player, create character ONLY for display device
+      // NEW PLAYER - only create if this is the display device AND we don't have this player yet
+      const character = this.createCharacter(playerId, isLocal, playerData.color);
       return {
         ...prev,
         [playerId]: {
           ...playerData,
           isLocal,
-          character: this.createCharacter(playerId, isLocal, playerData.color),
+          character,
         },
       };
     }
@@ -438,7 +439,7 @@ const MazeGame = ({
   const [timeLeft, setTimeLeft] = useState<number>(30);
   const [leaderboard, setLeaderboard] = useState<Array<{ playerId: string; info: string }>>([]);
   const startTime = useRef(Date.now());
-  const localPlayerId = useRef<string>(crypto.randomUUID());
+const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()); // Use only last 6 chars
 
   const createCharacter = (playerId: string, isLocal: boolean, color: number): THREE.Mesh => {
   const geometry = new THREE.SphereGeometry(BALL_RADIUS, 32, 32);
@@ -648,7 +649,7 @@ const MazeGame = ({
       sessionRef.current = session;
       viewRef.current = session.view;
 
-      // Join the local player ONLY for display device
+      // ONLY join the player once via multisynq (not via socket)
       session.view.joinPlayer(localPlayerId.current);
       
     } catch (error) {
@@ -660,11 +661,8 @@ const MazeGame = ({
     socket.connect();
   }
   
-  // Join as display device
-  socket.emit('join-player', {
-    playerId: localPlayerId.current,
-    deviceType: 'display',
-  });
+  // DON'T join via socket here - let multisynq handle it
+  // Remove this line: socket.emit('join-player', { playerId: localPlayerId.current, deviceType: 'display' });
 
   initMultisynq();
 
@@ -724,27 +722,27 @@ const MazeGame = ({
   }, [scene, camera]);
 
   useFrame(() => {
-    const localPlayer = Object.values(players).find(p => p.isLocal);
-    
-    let targetPosition: THREE.Vector3;
-    let lookAtTarget: THREE.Vector3;
-    
-    if (gamePhase === 'joining' || !localPlayer) {
-      // Show maze overview during joining phase
-      targetPosition = new THREE.Vector3(0, 15, 10);
-      lookAtTarget = new THREE.Vector3(0, 0, 0);
-    } else {
-      // Follow player during game - much closer camera
-      targetPosition = new THREE.Vector3(
-        localPlayer.position.x, 
-        localPlayer.position.y + 6, 
-        localPlayer.position.z + 6
-      );
-      lookAtTarget = new THREE.Vector3(localPlayer.position.x, localPlayer.position.y, localPlayer.position.z);
-    }
+  const localPlayer = Object.values(players).find(p => p.isLocal);
+  
+  let targetPosition: THREE.Vector3;
+  let lookAtTarget: THREE.Vector3;
+  
+  if (gamePhase === 'joining' || !localPlayer) {
+    // Show maze overview during joining phase - CLOSER view
+    targetPosition = new THREE.Vector3(0, 12, 8);
+    lookAtTarget = new THREE.Vector3(0, 0, 0);
+  } else {
+    // Follow player during game - much closer camera
+    targetPosition = new THREE.Vector3(
+      localPlayer.position.x, 
+      localPlayer.position.y + 8, 
+      localPlayer.position.z + 8
+    );
+    lookAtTarget = new THREE.Vector3(localPlayer.position.x, localPlayer.position.y, localPlayer.position.z);
+  }
 
-    camera.position.lerp(targetPosition, 0.05);
-    camera.lookAt(lookAtTarget);
+  camera.position.lerp(targetPosition, 0.08);
+  camera.lookAt(lookAtTarget);
 
     const time = Date.now() * 0.001;
     if (goalRef.current) {
@@ -903,7 +901,7 @@ const MazeGame = ({
       </group>
 
       {/* Render all player characters */}
-      {Object.entries(players).map(([playerId, player]) => (
+      {/*{Object.entries(players).map(([playerId, player]) => (
         <mesh
           key={playerId}
           position={[player.position.x, player.position.y, player.position.z]}
@@ -927,7 +925,7 @@ const MazeGame = ({
             opacity={player.isLocal ? 1.0 : 0.5}
           />
         </mesh>
-      ))}
+      ))}*/}
       </>
     );
   };

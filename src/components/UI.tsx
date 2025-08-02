@@ -12,7 +12,7 @@ interface UIProps {
 const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard, playerCount = 0 }) => {
   const [elapsed, setElapsed] = useState(0);
   const [showQR, setShowQR] = useState(true);
-  const [localPlayerId] = useState(() => crypto.randomUUID());
+const [localPlayerId] = useState(() => crypto.randomUUID().slice(-6).toUpperCase());
   const startTime = useRef(Date.now());
 
   useEffect(() => {
@@ -151,15 +151,20 @@ const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard, playerCount =
         </div>
 
        {/* Player Count */}
-  <div style={{ 
-    marginBottom: '15px',
-    color: '#cc99ff',
-    fontSize: '0.9em',
-  }}>
-    👥 Players Connected: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
-      {playerCount} {/* Use the prop instead of Object.keys(players).length */}
+<div style={{ 
+  marginBottom: '15px',
+  color: '#cc99ff',
+  fontSize: '0.9em',
+}}>
+  👥 Players Ready: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
+    {Math.floor(playerCount / 2)} {/* Divide by 2 since each player has 2 devices */}
+  </span>
+  {playerCount % 2 === 1 && (
+    <span style={{ color: '#ffff00', fontSize: '0.8em', marginLeft: '5px' }}>
+      (1 player setting up devices)
     </span>
-  </div>
+  )}
+</div>
 
         {/* Player ID Display */}
         <div style={{ 
