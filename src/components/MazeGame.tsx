@@ -494,14 +494,14 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
   label.style.position = 'absolute';
   label.style.color = '#ffffff';
   label.style.fontFamily = 'Orbitron, sans-serif';
-  label.textContent = `Player ${playerId.slice(-4)}`;
+  // Fix the undefined playerId issue:
+  label.textContent = `Player ${playerId ? playerId.slice(-4) : 'UNKN'}`;
   document.body.appendChild(label);
   mesh.userData.label = label;
 
   if (isLocal) setCharacter(mesh);
   return mesh;
 };
-
   const checkWallCollisions = (position: THREE.Vector3) => {
     const collisions: { axis: string; normal: number; penetration: number; correctedPos: number }[] = [];
 
