@@ -61,4 +61,20 @@ export const socket: Socket<SocketEvents> = io('https://samkdev.xyz', {
   forceNew: false
 });
 
+socket.on('connect', () => {
+  console.log('Socket connected');
+});
+
+socket.on('disconnect', (reason) => {
+  console.log('Socket disconnected:', reason);
+});
+
+// Prevent multiple event listeners
+let listenersAdded = false;
+if (!listenersAdded) {
+  // Basic connection event listeners are already added above
+  listenersAdded = true;
+}
+
+
 export const SocketContext = createContext(socket);

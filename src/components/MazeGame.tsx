@@ -90,7 +90,7 @@ class MazeModel extends Multisynq.Model {
     this.subscribe('game', 'phaseUpdate', this.handlePhaseUpdate);
     this.subscribe('player', 'tilt', this.handleTiltData);
     this.subscribe('player', 'leave', this.handlePlayerLeave);
-    
+
     // Start the joining phase timer
     this.future(1000).tick();
   }
@@ -99,7 +99,6 @@ handlePlayerJoin(data: { playerId: string; deviceType: 'display' | 'controller' 
   const { playerId, deviceType } = data;
   
   if (!this.players[playerId]) {
-    // Create new player with ALL required properties
     this.players[playerId] = {
       position: new THREE.Vector3(
         (mazeLayouts[0].start.x - mazeLayouts[0].layout.length / 2) * WALL_SIZE,
@@ -115,7 +114,6 @@ handlePlayerJoin(data: { playerId: string; deviceType: 'display' | 'controller' 
     };
     this.colorIndex++;
   } else {
-    // Update existing player's device status
     if (deviceType === 'controller') {
       this.players[playerId].hasController = true;
     } else if (deviceType === 'display') {
@@ -123,12 +121,15 @@ handlePlayerJoin(data: { playerId: string; deviceType: 'display' | 'controller' 
     }
   }
   
-  this.publish('player', 'joined', { 
-    playerId, 
-    playerData: this.players[playerId],
-    gamePhase: this.phase,
-    timeLeft: this.timeLeft 
-  });
+  // Only publish if player has BOTH devices
+  if (this.players[playerId].hasController && this.players[playerId].hasDisplay) {
+    this.publish('player', 'joined', { 
+      playerId, 
+      playerData: this.players[playerId],
+      gamePhase: this.phase,
+      timeLeft: this.timeLeft 
+    });
+  }
 };
 
 // ADD new method:
@@ -328,31 +329,23 @@ class MazeView extends Multisynq.View {
   const { playerId, playerData } = data;
   const isLocal = playerId === this.localPlayerId;
   
-  // Create player ONLY if it doesn't exist
-  this.setPlayers((prev) => {
-    if (prev[playerId]) {
-      // Player already exists, just update data
-      return {
-        ...prev,
-        [playerId]: {
-          ...prev[playerId],
-          ...playerData,
-          isLocal: isLocal || prev[playerId].isLocal,
-        },
-      };
-    } else {
-      // NEW PLAYER - only create if this is the display device AND we don't have this player yet
-      const character = this.createCharacter(playerId, isLocal, playerData.color);
-      return {
-        ...prev,
-        [playerId]: {
-          ...playerData,
-          isLocal,
-          character,
-        },
-      };
-    }
-  });
+  // Only create character for players with BOTH devices
+  if (playerData.hasController && playerData.hasDisplay) {
+    this.setPlayers((prev) => {
+      if (!prev[playerId]) {
+        const character = this.createCharacter(playerId, isLocal, playerData.color);
+        return {
+          ...prev,
+          [playerId]: {
+            ...playerData,
+            isLocal,
+            character,
+          },
+        };
+      }
+      return prev;
+    });
+  }
 };
 
   handlePhaseChanged(data: { phase: 'joining' | 'playing' | 'ended'; timeLeft: number; leaderboard: Array<{ playerId: string; info: string }> }) {
@@ -626,9 +619,9 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
   }, [players, gamePhase]);
 
   useEffect(() => {
-    const playerCount = Object.keys(players).length;
-    onPlayerCountChange(playerCount);
-  }, [players, onPlayerCountChange]);
+  const readyPlayerCount = Object.values(players).filter(p => p.hasController && p.hasDisplay).length;
+  onPlayerCountChange(readyPlayerCount);
+}, [players, onPlayerCountChange]);
 
   const resetGame = () => {
     setCurrentMaze(mazeLayouts[Math.floor(Math.random() * mazeLayouts.length)]);
@@ -697,15 +690,17 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
   };
 
   // Connect socket and join as display device
-  if (socket && !socket.connected) {
-    socket.connect();
-  }
+  // Connect socket only once
+if (socket && !socket.connected) {
+  socket.connect();
   
-  // Join as display device with proper data
-  socket.emit('join-player', { 
-    playerId: localPlayerId.current, 
-    deviceType: 'display' 
+  socket.once('connect', () => {
+    socket.emit('join-player', { 
+      playerId: localPlayerId.current, 
+      deviceType: 'display' 
+    });
   });
+}
 
   // Handle socket events for player connections
   const handlePlayerConnected = (data: { playerId: string; deviceType?: string; totalPlayers: number }) => {

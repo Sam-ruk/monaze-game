@@ -12,6 +12,7 @@ interface UIProps {
 const UI: React.FC<UIProps> = ({ gamePhase, timeLeft, leaderboard, playerCount = 0 }) => {
   const [elapsed, setElapsed] = useState(0);
   const [showQR, setShowQR] = useState(true);
+const [qrDismissed, setQrDismissed] = useState(false);
 const [localPlayerId] = useState(() => crypto.randomUUID().slice(-6).toUpperCase());
   const startTime = useRef(Date.now());
 
@@ -29,6 +30,13 @@ const [localPlayerId] = useState(() => crypto.randomUUID().slice(-6).toUpperCase
       setElapsed(0);
     }
   }, [gamePhase]);
+
+  useEffect(() => {
+  if (gamePhase === 'joining') {
+    setQrDismissed(false);
+    setShowQR(true);
+  }
+}, [gamePhase]);
 
   const formatTime = (seconds: number): string => {
     const mins = Math.floor(seconds / 60);
@@ -173,8 +181,7 @@ const [localPlayerId] = useState(() => crypto.randomUUID().slice(-6).toUpperCase
         </div>
 
         {/* QR Code Section */}
-        {showQR && (gamePhase === 'joining' || gamePhase === 'ended') && (
-          <div style={{ marginTop: '15px' }}>
+{showQR && !qrDismissed && (gamePhase === 'joining' || gamePhase === 'ended') && (          <div style={{ marginTop: '15px' }}>
             <div style={{ 
               display: 'flex', 
               justifyContent: 'space-between', 
@@ -189,7 +196,10 @@ const [localPlayerId] = useState(() => crypto.randomUUID().slice(-6).toUpperCase
                 📱 Join with Phone
               </h4>
               <button
-                onClick={() => setShowQR(!showQR)}
+                onClick={() => {
+  setShowQR(!showQR);
+  if (showQR) setQrDismissed(true);
+}}
                 style={{
                   background: 'transparent',
                   border: '1px solid #d400ff',
