@@ -156,14 +156,9 @@ const [localPlayerId] = useState(() => crypto.randomUUID().slice(-6).toUpperCase
   color: '#cc99ff',
   fontSize: '0.9em',
 }}>
-  👥 Players Ready: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
-    {Math.floor(playerCount / 2)} {/* Divide by 2 since each player has 2 devices */}
+  👥 Ready Players: <span style={{ color: '#ffffff', fontWeight: 'bold' }}>
+    {playerCount} {/* This should now show actual ready players */}
   </span>
-  {playerCount % 2 === 1 && (
-    <span style={{ color: '#ffff00', fontSize: '0.8em', marginLeft: '5px' }}>
-      (1 player setting up devices)
-    </span>
-  )}
 </div>
 
         {/* Player ID Display */}

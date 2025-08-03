@@ -26,6 +26,8 @@ interface Player {
   character: THREE.Mesh | null;
   isLocal: boolean;
   color: number;
+  hasController: boolean; // ADD THIS
+  hasDisplay: boolean;    // ADD THIS
 }
 
 interface TiltData {
@@ -77,7 +79,7 @@ class MazeModel extends Multisynq.Model {
   init() {
     this.players = {};
     this.phase = 'joining';
-    this.timeLeft = 30;
+    this.timeLeft = 60;
     this.leaderboard = [];
     this.colorIndex = 0;
     this.gameStartTime = null;
@@ -87,13 +89,17 @@ class MazeModel extends Multisynq.Model {
     this.subscribe('player', 'updatePosition', this.handleUpdatePosition);
     this.subscribe('game', 'phaseUpdate', this.handlePhaseUpdate);
     this.subscribe('player', 'tilt', this.handleTiltData);
+    this.subscribe('player', 'leave', this.handlePlayerLeave);
     
     // Start the joining phase timer
     this.future(1000).tick();
   }
 
-  handlePlayerJoin(playerId: string) {
+handlePlayerJoin(data: { playerId: string; deviceType: 'display' | 'controller' }) {
+  const { playerId, deviceType } = data;
+  
   if (!this.players[playerId]) {
+    // Create new player with ALL required properties
     this.players[playerId] = {
       position: new THREE.Vector3(
         (mazeLayouts[0].start.x - mazeLayouts[0].layout.length / 2) * WALL_SIZE,
@@ -104,15 +110,43 @@ class MazeModel extends Multisynq.Model {
       finishTime: null,
       isLocal: false,
       color: colors[this.colorIndex % colors.length],
+      hasController: deviceType === 'controller',
+      hasDisplay: deviceType === 'display',
     };
     this.colorIndex++;
+  } else {
+    // Update existing player's device status
+    if (deviceType === 'controller') {
+      this.players[playerId].hasController = true;
+    } else if (deviceType === 'display') {
+      this.players[playerId].hasDisplay = true;
+    }
+  }
+  
+  this.publish('player', 'joined', { 
+    playerId, 
+    playerData: this.players[playerId],
+    gamePhase: this.phase,
+    timeLeft: this.timeLeft 
+  });
+};
+
+// ADD new method:
+handlePlayerLeave(data: { playerId: string; deviceType?: 'display' | 'controller' }) {
+  const { playerId, deviceType } = data;
+  if (this.players[playerId]) {
+    if (deviceType === 'controller') {
+      this.players[playerId].hasController = false;
+    } else if (deviceType === 'display') {
+      this.players[playerId].hasDisplay = false;
+    }
     
-    this.publish('player', 'joined', { 
-      playerId, 
-      playerData: this.players[playerId],
-      gamePhase: this.phase,
-      timeLeft: this.timeLeft 
-    });
+    // Remove player if no devices connected
+    if (!this.players[playerId].hasController && !this.players[playerId].hasDisplay) {
+      delete this.players[playerId];
+    }
+    
+    this.publish('player', 'left', { playerId });
   }
 }
 
@@ -141,37 +175,28 @@ class MazeModel extends Multisynq.Model {
   }
 
   handleTiltData(data: { playerId: string; tiltX: number; tiltZ: number }) {
-    const { playerId, tiltX, tiltZ } = data;
+  const { playerId, tiltX, tiltZ } = data;
+  // Only process if player has BOTH devices
+  if (this.players[playerId]?.hasController && this.players[playerId]?.hasDisplay) {
     this.publish('player', 'tiltReceived', { playerId, tiltX, tiltZ });
   }
-
-  handlePlayerLeave(playerId: string) {
-    if (this.players[playerId]) {
-      delete this.players[playerId];
-      this.publish('player', 'left', { playerId });
-      this.updateLeaderboard();
-    }
-  }
+}
 
   tick() {
     let newTime = this.timeLeft - 1;
     let newPhase = this.phase;
 
     if (this.phase === 'joining' && newTime <= 0) {
-      newPhase = 'playing';
-      newTime = 600;
-      // Reset all players to start position when game actually starts
-      Object.keys(this.players).forEach(playerId => {
-        this.players[playerId].position.set(
-          (mazeLayouts[0].start.x - mazeLayouts[0].layout.length / 2) * WALL_SIZE,
-          BALL_HEIGHT,
-          (mazeLayouts[0].start.z - mazeLayouts[0].layout[0].length / 2) * WALL_SIZE,
-        );
-        this.players[playerId].velocity.set(0, 0, 0);
-        this.players[playerId].finishTime = null;
-      });
-      this.publish('game', 'gameStarted', { players: this.players });
-    } else if (this.phase === 'playing' && newTime <= 0) {
+  const readyPlayers = Object.values(this.players).filter(p => p.hasController && p.hasDisplay);
+  
+  if (readyPlayers.length > 0) {
+    newPhase = 'playing';
+    newTime = 120; // 2 minutes
+    // Reset only ready players
+  } else {
+    newTime = 60; // Restart joining if no ready players
+  }
+} else if (this.phase === 'playing' && newTime <= 0) {
       newPhase = 'ended';
       newTime = 10;
       this.updateLeaderboard();
@@ -405,6 +430,10 @@ class MazeView extends Multisynq.View {
       window.updateCharacterPhysics(playerId, tiltX, tiltZ);
     }
   };
+  // Add this method to the MazeView class (after handleTiltReceived method)
+handlePlayerLeave(playerId: string) {
+  this.publish('player', 'leave', { playerId });
+}
 
   // Methods to send data to model
   joinPlayer(playerId: string) {
@@ -668,24 +697,44 @@ const localPlayerId = useRef<string>(crypto.randomUUID().slice(-6).toUpperCase()
   };
 
   // Connect socket and join as display device
-  if (!socket.connected) {
+  if (socket && !socket.connected) {
     socket.connect();
   }
   
+  // Join as display device with proper data
   socket.emit('join-player', { 
     playerId: localPlayerId.current, 
     deviceType: 'display' 
   });
 
+  // Handle socket events for player connections
+  const handlePlayerConnected = (data: { playerId: string; deviceType?: string; totalPlayers: number }) => {
+  if (data.deviceType === 'controller' && viewRef.current) {
+    viewRef.current.joinPlayer(data.playerId);
+  }
+};
+
+const handlePlayerDisconnected = (data: { playerId: string; deviceType?: string; totalPlayers?: number }) => {
+  if (viewRef.current) {
+    viewRef.current.handlePlayerLeave(data.playerId);
+  }
+};
+
+  socket.on('player-connected', handlePlayerConnected);
+  socket.on('player-disconnected', handlePlayerDisconnected);
+
   initMultisynq();
 
   return () => {
+    socket.off('player-connected', handlePlayerConnected);
+    socket.off('player-disconnected', handlePlayerDisconnected);
+    
     if (sessionRef.current) {
       sessionRef.current.leave();
       sessionRef.current = null;
     }
   };
-}, [onGamePhaseChange, onTimeLeftChange, onLeaderboardChange]);
+}, [socket, onGamePhaseChange, onTimeLeftChange, onLeaderboardChange]);
 
   useEffect(() => {
   socket.on('tilt-data', (data: TiltData) => {
